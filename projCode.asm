@@ -23,11 +23,18 @@
 	after:.space 1024 			# array to store content of file after split the comma
 	ZeroFloat: .float 0.0 			# contain 0 
 	OneFloat: .float 1.0			# contain 1
+	Addaptive_Increase: .float 1.05  	#addaptive  value when incr
+  	Addaptive_Decrease:.float 0.7 		#addaptive value when dec 
+  	Addaptive_Threshold:.float 1.04		#addaptive value thershold
+		
 		
 #Messages
 	Welcom:.asciiz "\t\t\t\t\tLayer Neural Networks (Perceptron)Project"
-	Names: .asciiz "\t\t\t\t\tMaen Khdour 1171944 | Aminah Abo Shlbaya 1170963 "
-	table_con: .asciiz "\t\tX1\tI_W1\tX2\tI_W2\tY_d\tY_actual\tError(e)\tN_W1\tN_w2\tLearR\tMomentum\tThreshold"
+	Names: .asciiz "\t\t\t\t\tMaen Khdour 1171944 "
+	table_con: .asciiz "\t\tX1\tI_W1\tX2\tI_W2\tY_d\tY_actual\tError(e)\t N_W1\t N_w2"
+	M_learn:.asciiz "\tLearnin rate:"
+	M_mom:.asciiz "\t Momentum:"
+	M_thr:.asciiz "\t Threshold rate:"
 	n_ep: .asciiz "Epoch: "
 	space:.asciiz "\t"
 	learning_value:.asciiz "Learning rate = "
@@ -264,14 +271,14 @@ exit5:
    	## 
    	
 #*********************************#
-
+# enter weight
 #get the array into a register
 
 	la $t3, after 				# put address of list into $t3
 	lb $t4, 0($t3) 				# get the value from the array cell (number of featers)
 	move $s1,$t4   				# number of featers from file
 	addi $t0,$0,0    			# clear reg t0
-	sub.s $f1,$f1,$f1	
+	sub.s $f1,$f1,$f1			# clear reg f1
 loopw:
 ##print new line
 	li $v0, 11				# code to cal print  character 
@@ -309,6 +316,7 @@ exitw:
      	
 	lwc1 $f0,ZeroFloat			# put zero to f0 
 	lw $s5,ep 				#store value of epoch in s5
+	move $a3,$s5				# move 5 to a3
 	
    
 #LOOPS and ITRATION:
@@ -356,7 +364,10 @@ Loop_Number_Epoch:
    	li $v0,4                 		# code call print string message 
    	la $a0,table_con	 		# message print contents
    	syscall
-   	
+
+	li $t1,0				#clear t1
+   	sub.s $f24,$f24,$f24 			#clear f24 for sum
+   	sub.s $f30,$f30,$f30 			#clear f30 
 ###########################
 
 power:	
@@ -449,13 +460,23 @@ Set_One:
  	
 ###################################################
 
+incre_flag:
+	add $t1,$t1,1				#increment t1 flag 
+	j if
+	
 error:
 #Calculate the Error 
 	lb   $t0, after($t2)
 	mtc1 $t0, $f5				# move from reg to coproce1
         cvt.s.w $f5, $f5			#move from reg to coproce1
         sub.s $f4,$f5,$f3			#sub yd(f5) - yac(f3)
+        c.eq.s $f4,$f0				
+        bc1f incre_flag				# if false
+        if:
+        mul.s $f22,$f4,$f4			# squear error e^2
+        add.s $f24,$f24,$f22			# sum e^2
 	
+
 ## print space & value
    	li $v0,4         			 # code call print string message 
    	la $a0, space				 # print space tab 
@@ -533,10 +554,21 @@ New_Weight:
 
 out:
 	addi $t2 ,$t2,1				# for index increment
-	
-## print space & value
+	j Number_of_line
+  
+exit_end:
+##
+	li $v0, 11
+	li $a0, 10 				# print new line
+        syscall
+        ###
+        ## print space & value
    	li $v0,4          			# code call print string message 
    	la $a0, space	 			# print space tab 
+   	syscall
+   	
+   	li $v0,4          			# code call print string message 
+   	la $a0, M_learn	 			# print messge learining 
    	syscall
    	
 	li $v0,2  				# print to check
@@ -549,6 +581,10 @@ out:
    	la $a0, space				# print space tab 
    	syscall
    	
+   	li $v0,4          			# code call print string message 
+   	la $a0, M_mom	 			# print messge momutum 
+   	syscall
+   	
 	li $v0,2  				# print to check
 	add.s $f12,$f13,$f0			# print the momentum
 	syscall
@@ -559,19 +595,23 @@ out:
    	la $a0, space	 			# print space tab 
    	syscall
    	
+   	li $v0,4          			# code call print string message 
+   	la $a0, M_thr	 			# print messge threshold 
+   	syscall
+   	
 	li $v0,2  				# print to check
 	add.s $f12,$f2,$f0			# print Threshold
 	syscall
 	##
-	j Number_of_line
-  
-exit_end:
-	##
-	li $v0, 11
-	li $a0, 10 				# print new line
-        syscall
-        ###
-
+	
+	### for update learinig rate
+	sub $a3,$a3,$s5				#sub number of epoch 
+	bne $a3,1,ADDAPTIVE_LEARNING		# 
+	mov.s $f26,$f24
+	lol:
+	
+	beqz $t1, End_Programe
+	
 	j Loop_Number_Epoch
 
 
@@ -583,6 +623,26 @@ la $a0,errorfile				# to call print message error
 la $a1,1
 syscall   
 j read_file
+
+###################################################
+#function to make addpative learining
+
+ADDAPTIVE_LEARNING:
+  sub.s	$f26, $f24, $f26 			# sub f24 ( sum error^2) current - pervious 
+  lwc1 $f18,Addaptive_Threshold 		# $f18 = ADDAPTIVE_threshold= 1.04  
+  c.le.s $f26,$f18     			        # compare sub if flase --> decrease 
+  bc1f decrease        				# $f26 > $f18
+  lwc1 $f18,Addaptive_Increase 			# $f18 = 1.05
+  dec:
+      lwc1 $f20,le  				 # load lerainig value
+      mul.s $f18,$f18,$f20      		# LEARNING_RATE = LEARNING_RATE * ( 1.05 | 0.7 ) 
+      swc1 $f18,le   				#load lerainig value
+      mov.s $f26,$f24				# move 
+  j lol
+  decrease:
+    lwc1 $f18,Addaptive_Decrease 		# $f18 = 0.7
+  j dec
+
 
 ###################################################	
 End_Programe:	
